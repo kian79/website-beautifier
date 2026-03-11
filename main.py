@@ -27,6 +27,9 @@ previews: dict[str, dict] = {}
 class BeautifyRequest(BaseModel):
     url: str
     color_palette: str | None = None
+    design_style: str | None = None
+    font_pairing: str | None = None
+    visual_effects: str | None = None
     instructions: str | None = None
 
 
@@ -81,6 +84,9 @@ async def beautify(req: BeautifyRequest):
         page_data["title"],
         page_data["original_url"],
         color_palette=req.color_palette,
+        design_style=req.design_style,
+        font_pairing=req.font_pairing,
+        visual_effects=req.visual_effects,
         instructions=req.instructions,
     )
 
