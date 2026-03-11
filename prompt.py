@@ -30,12 +30,41 @@ Important:
 """
 
 
-def build_user_prompt(cleaned_html: str, page_title: str, original_url: str) -> str:
-    return (
+PALETTE_DESCRIPTIONS = {
+    "Ocean Blue": "shades of blue, navy, and white as the primary colors",
+    "Forest Green": "shades of green, emerald, and cream as the primary colors",
+    "Sunset Warm": "warm oranges, corals, and soft yellows as the primary colors",
+    "Purple Haze": "purples, lavenders, and soft pinks as the primary colors",
+    "Monochrome": "black, white, and shades of gray as the primary colors",
+    "Corporate Blue": "professional blues, slate grays, and white as the primary colors",
+}
+
+
+def build_user_prompt(
+    cleaned_html: str,
+    page_title: str,
+    original_url: str,
+    color_palette: str | None = None,
+    instructions: str | None = None,
+) -> str:
+    parts = [
         f'Here is the HTML of a webpage titled "{page_title}" from {original_url}.\n'
         f"Please redesign it into a beautiful, modern page. Make sure to include ALL "
-        f"sections and content from the original — do not skip anything.\n\n"
+        f"sections and content from the original — do not skip anything.",
+    ]
+
+    if color_palette and color_palette in PALETTE_DESCRIPTIONS:
+        parts.append(
+            f"Use this color palette: {color_palette} — use {PALETTE_DESCRIPTIONS[color_palette]}."
+        )
+
+    if instructions and instructions.strip():
+        parts.append(f"Additional design instructions from the user: {instructions.strip()}")
+
+    parts.append(
         f"---HTML START---\n"
         f"{cleaned_html}\n"
         f"---HTML END---"
     )
+
+    return "\n\n".join(parts)

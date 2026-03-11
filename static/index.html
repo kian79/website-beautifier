@@ -83,6 +83,81 @@
     button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+    .options {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #86868b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .palette-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .palette-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border: 2px solid #e5e5ea;
+      border-radius: 10px;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #1d1d1f;
+      user-select: none;
+    }
+
+    .palette-option:hover {
+      border-color: #c7c7cc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .palette-option.selected {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    .swatches {
+      display: flex;
+      gap: 3px;
+    }
+
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 1rem;
+      font-family: inherit;
+      border: 2px solid #e5e5ea;
+      border-radius: 12px;
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus { border-color: #6366f1; }
+
     .status {
       margin-top: 24px;
       text-align: center;
@@ -178,6 +253,74 @@
           <input type="url" id="urlInput" placeholder="https://example.com" required>
           <button type="submit" id="submitBtn">Beautify</button>
         </div>
+
+        <div class="options">
+          <div>
+            <label>Color Palette</label>
+            <div class="palette-grid" id="paletteGrid">
+              <div class="palette-option selected" data-value="">
+                <div class="swatches">
+                  <div class="swatch" style="background: linear-gradient(135deg, #6366f1, #a855f7);"></div>
+                  <div class="swatch" style="background: linear-gradient(135deg, #f59e0b, #10b981);"></div>
+                  <div class="swatch" style="background: linear-gradient(135deg, #ec4899, #8b5cf6);"></div>
+                </div>
+                <span>Auto</span>
+              </div>
+              <div class="palette-option" data-value="Ocean Blue">
+                <div class="swatches">
+                  <div class="swatch" style="background: #1e3a5f;"></div>
+                  <div class="swatch" style="background: #3b82f6;"></div>
+                  <div class="swatch" style="background: #bfdbfe;"></div>
+                </div>
+                <span>Ocean Blue</span>
+              </div>
+              <div class="palette-option" data-value="Forest Green">
+                <div class="swatches">
+                  <div class="swatch" style="background: #14532d;"></div>
+                  <div class="swatch" style="background: #22c55e;"></div>
+                  <div class="swatch" style="background: #f5f5dc;"></div>
+                </div>
+                <span>Forest Green</span>
+              </div>
+              <div class="palette-option" data-value="Sunset Warm">
+                <div class="swatches">
+                  <div class="swatch" style="background: #ea580c;"></div>
+                  <div class="swatch" style="background: #f97316;"></div>
+                  <div class="swatch" style="background: #fde68a;"></div>
+                </div>
+                <span>Sunset Warm</span>
+              </div>
+              <div class="palette-option" data-value="Purple Haze">
+                <div class="swatches">
+                  <div class="swatch" style="background: #7c3aed;"></div>
+                  <div class="swatch" style="background: #c084fc;"></div>
+                  <div class="swatch" style="background: #fce7f3;"></div>
+                </div>
+                <span>Purple Haze</span>
+              </div>
+              <div class="palette-option" data-value="Monochrome">
+                <div class="swatches">
+                  <div class="swatch" style="background: #171717;"></div>
+                  <div class="swatch" style="background: #737373;"></div>
+                  <div class="swatch" style="background: #e5e5e5;"></div>
+                </div>
+                <span>Monochrome</span>
+              </div>
+              <div class="palette-option" data-value="Corporate Blue">
+                <div class="swatches">
+                  <div class="swatch" style="background: #1e40af;"></div>
+                  <div class="swatch" style="background: #64748b;"></div>
+                  <div class="swatch" style="background: #f8fafc;"></div>
+                </div>
+                <span>Corporate Blue</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label for="instructionsInput">Custom Instructions</label>
+            <textarea id="instructionsInput" placeholder="e.g., Make it minimal, use large hero image, dark mode..."></textarea>
+          </div>
+        </div>
       </form>
 
       <div class="status">
@@ -201,7 +344,18 @@
   <script>
     const form = document.getElementById('beautifyForm');
     const urlInput = document.getElementById('urlInput');
+    const paletteGrid = document.getElementById('paletteGrid');
+    const instructionsInput = document.getElementById('instructionsInput');
     const submitBtn = document.getElementById('submitBtn');
+    let selectedPalette = '';
+
+    paletteGrid.addEventListener('click', (e) => {
+      const option = e.target.closest('.palette-option');
+      if (!option) return;
+      paletteGrid.querySelectorAll('.palette-option').forEach(el => el.classList.remove('selected'));
+      option.classList.add('selected');
+      selectedPalette = option.dataset.value;
+    });
     const loading = document.getElementById('loading');
     const error = document.getElementById('error');
     const result = document.getElementById('result');
@@ -244,7 +398,11 @@
         const res = await fetch('/api/beautify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({
+            url,
+            color_palette: selectedPalette || null,
+            instructions: instructionsInput.value.trim() || null,
+          }),
         });
 
         const data = await res.json();

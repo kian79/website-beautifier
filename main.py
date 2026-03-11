@@ -24,6 +24,8 @@ previews: dict[str, str] = {}
 
 class BeautifyRequest(BaseModel):
     url: str
+    color_palette: str | None = None
+    instructions: str | None = None
 
 
 class BeautifyResponse(BaseModel):
@@ -63,6 +65,8 @@ async def beautify(req: BeautifyRequest):
         page_data["cleaned_html"],
         page_data["title"],
         page_data["original_url"],
+        color_palette=req.color_palette,
+        instructions=req.instructions,
     )
 
     print(f"[beautify] Sending to {MODEL} ({len(user_prompt)} chars prompt) ...")
