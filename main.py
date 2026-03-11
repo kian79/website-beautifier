@@ -6,6 +6,7 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
@@ -16,10 +17,11 @@ load_dotenv()
 
 app = FastAPI(title="Beautify")
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
-MODEL = "gpt-4.1" # Use the new 4.1 model for better HTML generation
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-previews: dict[str, str] = {}
+# In-memory preview storage with a max cap to prevent unbounded growth
+MAX_PREVIEWS = 100
+previews: dict[str, dict] = {}
 
 
 class BeautifyRequest(BaseModel):
@@ -39,6 +41,13 @@ def strip_code_fences(text: str) -> str:
     return text.strip()
 
 
+def _evict_oldest():
+    """Remove the oldest preview if we've exceeded the cap."""
+    while len(previews) > MAX_PREVIEWS:
+        oldest_key = min(previews, key=lambda k: previews[k]["created_at"])
+        del previews[oldest_key]
+
+
 @app.get("/")
 async def index():
     return FileResponse("static/index.html")
@@ -46,19 +55,25 @@ async def index():
 
 @app.post("/api/beautify", response_model=BeautifyResponse)
 async def beautify(req: BeautifyRequest):
+    url = req.url.strip()
+
+    # Basic URL validation
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
     t0 = time.time()
 
     # 1. Fetch and clean
-    print(f"[beautify] Fetching {req.url} ...")
+    print(f"[beautify] Fetching {url} ...")
     try:
-        page_data = await fetch_and_clean(req.url)
+        page_data = await fetch_and_clean(url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not fetch URL: {e}")
 
     cleaned_len = len(page_data["cleaned_html"])
     print(f"[beautify] Fetched & cleaned in {time.time() - t0:.1f}s — {cleaned_len} chars")
 
-    # 2. Call GPT-4o
+    # 2. Call LLM
     user_prompt = build_user_prompt(
         page_data["cleaned_html"],
         page_data["title"],
@@ -75,7 +90,7 @@ async def beautify(req: BeautifyRequest):
                 {"role": "user", "content": user_prompt},
             ],
             max_tokens=16000,
-            timeout=120.0,
+            timeout=180.0,
         )
     except Exception as e:
         print(f"[beautify] LLM failed after {time.time() - t1:.1f}s: {e}")
@@ -97,7 +112,13 @@ async def beautify(req: BeautifyRequest):
 
     # 3. Store and return
     preview_id = uuid.uuid4().hex[:8]
-    previews[preview_id] = redesigned_html
+    previews[preview_id] = {
+        "html": redesigned_html,
+        "original_url": url,
+        "title": page_data["title"],
+        "created_at": time.time(),
+    }
+    _evict_oldest()
 
     print(f"[beautify] Done in {time.time() - t0:.1f}s total — /preview/{preview_id}")
     return BeautifyResponse(preview_url=f"/preview/{preview_id}", id=preview_id)
@@ -105,7 +126,21 @@ async def beautify(req: BeautifyRequest):
 
 @app.get("/preview/{preview_id}")
 async def preview(preview_id: str):
-    html = previews.get(preview_id)
-    if not html:
-        raise HTTPException(status_code=404, detail="Preview not found")
-    return HTMLResponse(content=html)
+    entry = previews.get(preview_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Preview not found or expired")
+    return HTMLResponse(content=entry["html"])
+
+
+@app.get("/api/history")
+async def history():
+    """Return list of recent beautifications."""
+    items = []
+    for pid, entry in sorted(previews.items(), key=lambda x: x[1]["created_at"], reverse=True):
+        items.append({
+            "id": pid,
+            "preview_url": f"/preview/{pid}",
+            "original_url": entry["original_url"],
+            "title": entry["title"],
+        })
+    return items
