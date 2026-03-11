@@ -14,15 +14,47 @@ REMOVE_TAGS = {"script", "noscript", "iframe"}
 # Event handlers and tracking attrs — remove these but keep class/id
 REMOVE_ATTR_PREFIXES = ("on", "data-tracking", "data-analytics", "data-ad")
 
+# Dangerous URL schemes to reject
+BLOCKED_SCHEMES = {"file", "ftp", "javascript", "data"}
+
+
+def validate_url(url: str) -> str:
+    """Validate and normalize the URL. Raises ValueError for bad URLs."""
+    url = url.strip()
+    if not url:
+        raise ValueError("URL cannot be empty")
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    parsed = urlparse(url)
+
+    if parsed.scheme.lower() in BLOCKED_SCHEMES:
+        raise ValueError(f"Blocked URL scheme: {parsed.scheme}")
+
+    if not parsed.netloc:
+        raise ValueError("Invalid URL: no hostname")
+
+    # Block localhost / private IPs
+    hostname = parsed.hostname or ""
+    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+        raise ValueError("Cannot fetch localhost URLs")
+    if hostname.startswith(("10.", "192.168.", "172.16.")):
+        raise ValueError("Cannot fetch private network URLs")
+
+    return url
+
 
 async def fetch_and_clean(url: str) -> dict:
     """Fetch a URL and return cleaned HTML suitable for LLM redesign."""
+    url = validate_url(url)
+
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=15.0,
         headers={"User-Agent": USER_AGENT},
-    ) as client:
-        response = await client.get(url)
+    ) as http_client:
+        response = await http_client.get(url)
         response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -53,7 +85,7 @@ async def fetch_and_clean(url: str) -> dict:
         if width in ("0", "1") or height in ("0", "1"):
             img.decompose()
 
-    # Convert relative URLs to absolute for images and links
+    # Convert relative URLs to absolute for images, links, and sources
     base_url = url
     base_tag = soup.find("base", href=True)
     if base_tag:
@@ -64,7 +96,24 @@ async def fetch_and_clean(url: str) -> dict:
     for a in soup.find_all("a", href=True):
         a["href"] = urljoin(base_url, a["href"])
     for source in soup.find_all("source", srcset=True):
-        source["srcset"] = urljoin(base_url, source["srcset"])
+        # Handle multiple srcset entries
+        parts = []
+        for entry in source["srcset"].split(","):
+            tokens = entry.strip().split()
+            if tokens:
+                tokens[0] = urljoin(base_url, tokens[0])
+            parts.append(" ".join(tokens))
+        source["srcset"] = ", ".join(parts)
+    for video in soup.find_all("video", src=True):
+        video["src"] = urljoin(base_url, video["src"])
+    for img in soup.find_all("img", attrs={"srcset": True}):
+        parts = []
+        for entry in img["srcset"].split(","):
+            tokens = entry.strip().split()
+            if tokens:
+                tokens[0] = urljoin(base_url, tokens[0])
+            parts.append(" ".join(tokens))
+        img["srcset"] = ", ".join(parts)
 
     # Strip event-handler and tracking attributes, but keep class/id for context
     for tag in soup.find_all(True):
@@ -103,7 +152,11 @@ def _truncate_html(soup: BeautifulSoup, max_length: int) -> str:
     body = soup.find("body")
 
     if not body:
-        return str(soup)[:max_length]
+        # Fallback: slice the raw HTML but try to close the tag
+        truncated = str(soup)[:max_length]
+        if not truncated.rstrip().endswith("</html>"):
+            truncated += "</html>"
+        return truncated
 
     head_html = str(head) if head else ""
     budget = max_length - len(head_html) - len("<html><body></body></html>")

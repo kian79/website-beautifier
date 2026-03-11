@@ -13,14 +13,15 @@
       color: #1d1d1f;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
       padding: 24px;
     }
 
     .container {
       width: 100%;
-      max-width: 680px;
+      max-width: 780px;
+      margin-top: 40px;
     }
 
     .card {
@@ -199,24 +200,32 @@
     .result {
       display: none;
       margin-top: 24px;
-      text-align: center;
     }
 
-    .result.visible { display: block; }
+    .result.visible { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-    .result a {
+    .result a, .result button.secondary {
       display: inline-block;
       padding: 14px 32px;
       font-size: 1rem;
       font-weight: 600;
       color: #fff;
-      background: linear-gradient(135deg, #10b981, #059669);
       border-radius: 12px;
       text-decoration: none;
       transition: opacity 0.2s;
+      border: none;
+      cursor: pointer;
     }
 
-    .result a:hover { opacity: 0.9; }
+    .result a {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    .result a:hover, .result button.secondary:hover { opacity: 0.9; }
+
+    .result button.secondary {
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+    }
 
     .preview-frame {
       display: none;
@@ -224,7 +233,8 @@
       border: 2px solid #e5e5ea;
       border-radius: 16px;
       overflow: hidden;
-      height: 500px;
+      height: 600px;
+      position: relative;
     }
 
     .preview-frame.visible { display: block; }
@@ -235,10 +245,95 @@
       border: none;
     }
 
+    .preview-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e5ea;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    .preview-toolbar .device-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .preview-toolbar .device-btns button {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      border-radius: 8px;
+      background: #e5e7eb;
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .preview-toolbar .device-btns button.active {
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      color: #fff;
+    }
+
+    .history-section {
+      display: none;
+      margin-top: 32px;
+    }
+
+    .history-section.visible { display: block; }
+
+    .history-section h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #374151;
+    }
+
+    .history-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .history-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #fff;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+
+    .history-list li .hist-title {
+      font-weight: 500;
+      color: #1d1d1f;
+    }
+
+    .history-list li .hist-url {
+      font-size: 0.85rem;
+      color: #86868b;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 300px;
+    }
+
+    .history-list li a {
+      color: #6366f1;
+      font-weight: 500;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .history-list li a:hover { text-decoration: underline; }
+
     @media (max-width: 520px) {
       .card { padding: 32px 24px; }
       .input-group { flex-direction: column; }
       button { width: 100%; }
+      .result { flex-direction: column; align-items: stretch; }
+      .history-list li { flex-direction: column; align-items: flex-start; gap: 4px; }
     }
   </style>
 </head>
@@ -246,7 +341,7 @@
   <div class="container">
     <div class="card">
       <h1>Beautify</h1>
-      <p class="subtitle">Paste a URL. Get a beautiful redesign.</p>
+      <p class="subtitle">Paste a URL. Get a beautiful redesign powered by AI + Tailwind CSS.</p>
 
       <form id="beautifyForm">
         <div class="input-group">
@@ -326,18 +421,32 @@
       <div class="status">
         <div class="loading" id="loading">
           <div class="spinner"></div>
-          <span>Redesigning&hellip; this may take 20&ndash;30 seconds</span>
+          <span id="loadingText">Redesigning&hellip; this may take 20&ndash;40 seconds</span>
         </div>
         <div class="error" id="error"></div>
       </div>
 
       <div class="result" id="result">
-        <a id="resultLink" href="#" target="_blank">View Redesigned Page</a>
+        <a id="resultLink" href="#" target="_blank">Open Full Page</a>
+        <button class="secondary" id="togglePreview">Toggle Preview</button>
       </div>
     </div>
 
     <div class="preview-frame" id="previewFrame">
+      <div class="preview-toolbar">
+        <span id="previewLabel">Preview</span>
+        <div class="device-btns">
+          <button class="active" data-width="100%">Desktop</button>
+          <button data-width="768px">Tablet</button>
+          <button data-width="375px">Mobile</button>
+        </div>
+      </div>
       <iframe id="previewIframe"></iframe>
+    </div>
+
+    <div class="history-section" id="historySection">
+      <h2>Recent Beautifications</h2>
+      <ul class="history-list" id="historyList"></ul>
     </div>
   </div>
 
@@ -357,11 +466,16 @@
       selectedPalette = option.dataset.value;
     });
     const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
     const error = document.getElementById('error');
     const result = document.getElementById('result');
     const resultLink = document.getElementById('resultLink');
+    const togglePreview = document.getElementById('togglePreview');
     const previewFrame = document.getElementById('previewFrame');
     const previewIframe = document.getElementById('previewIframe');
+    const previewLabel = document.getElementById('previewLabel');
+    const historySection = document.getElementById('historySection');
+    const historyList = document.getElementById('historyList');
 
     function showLoading() {
       loading.classList.add('visible');
@@ -369,6 +483,7 @@
       result.classList.remove('visible');
       previewFrame.classList.remove('visible');
       submitBtn.disabled = true;
+      loadingText.textContent = 'Redesigning\u2026 this may take 20\u201340 seconds';
     }
 
     function showError(msg) {
@@ -385,7 +500,23 @@
       previewIframe.src = previewUrl;
       previewFrame.classList.add('visible');
       submitBtn.disabled = false;
+      loadHistory();
     }
+
+    // Device preview switching
+    document.querySelectorAll('.device-btns button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.device-btns button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        previewIframe.style.maxWidth = btn.dataset.width;
+        previewIframe.style.margin = btn.dataset.width === '100%' ? '0' : '0 auto';
+        previewIframe.style.display = 'block';
+      });
+    });
+
+    togglePreview.addEventListener('click', () => {
+      previewFrame.classList.toggle('visible');
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -417,6 +548,35 @@
         showError('Network error. Is the server running?');
       }
     });
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const items = await res.json();
+        if (items.length === 0) {
+          historySection.classList.remove('visible');
+          return;
+        }
+        historyList.innerHTML = items.map(item => `
+          <li>
+            <div>
+              <div class="hist-title">${escapeHtml(item.title)}</div>
+              <div class="hist-url">${escapeHtml(item.original_url)}</div>
+            </div>
+            <a href="${item.preview_url}" target="_blank">View</a>
+          </li>
+        `).join('');
+        historySection.classList.add('visible');
+      } catch (e) {}
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadHistory();
   </script>
 </body>
 </html>
